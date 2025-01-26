@@ -1,0 +1,60 @@
+use regex::Regex;
+use std::collections::HashMap;
+use std::error::Error;
+use std::fs;
+
+pub struct Config {
+    pub file_path: String,
+}
+
+impl Config {
+    pub fn build(mut args: impl Iterator<Item = String>) -> Result<Config, &'static str> {
+        args.next();
+        let file_path = match args.next() {
+            Some(arg) => arg,
+            None => return Err("Didn't get a file path."),
+        };
+        Ok(Config { file_path })
+    }
+}
+
+pub fn run(config: Config) -> Result<i32, Box<dyn Error>> {
+    let numbers = HashMap::from([
+        ("one", "1"),
+        ("two", "2"),
+        ("three", "3"),
+        ("four", "4"),
+        ("five", "5"),
+        ("six", "6"),
+        ("seven", "7"),
+        ("eight", "8"),
+        ("nine", "9"),
+    ]);
+    let reg = format!(r"{}", numbers.join("|"));
+    let re = Regex::new(reg.as_str()).unwrap();
+    let mut sum = 0;
+    let contents =
+        fs::read_to_string(config.file_path).expect("Something went wrong reading the file.");
+    for line in contents.lines() {
+        let mut temp = line.to_string();
+        while re.is_match(&temp) {
+            let my_match = re.find(&temp);
+            if let Some(word) = my_match {
+                let index =
+                    (numbers.iter().position(|&x| x == word.as_str()).unwrap() + 1).to_string();
+                temp = temp.replace(word.as_str(), &index);
+            }
+        }
+        println!("{}", temp);
+        let chars: Vec<char> = temp
+            .chars()
+            .filter(|ch| ch.is_ascii_digit())
+            .collect::<Vec<_>>();
+        if !chars.is_empty() {
+            sum += format!("{}{}", chars[0], chars[chars.len() - 1])
+                .parse::<i32>()
+                .unwrap();
+        }
+    }
+    Ok(sum)
+}

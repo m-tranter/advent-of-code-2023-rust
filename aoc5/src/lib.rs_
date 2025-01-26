@@ -1,0 +1,133 @@
+use regex::Regex;
+use std::error::Error;
+use std::fs::File;
+use std::io::{self, BufRead};
+use std::path::Path;
+use std::sync::LazyLock;
+
+fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
+where
+    P: AsRef<Path>,
+{
+    let file = File::open(filename)?;
+    Ok(io::BufReader::new(file).lines())
+}
+
+static RX_NUM: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\d+)").unwrap());
+static RX_MAP: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\d+)\s(\d+)\s(\d+)").unwrap());
+
+pub struct Config {
+    pub file_path: String,
+}
+
+#[derive(Debug)]
+struct Map {
+    d_start: u64,
+    s_start: u64,
+    range: u64,
+}
+impl Map {
+    fn transform(&self, n: u64) -> u64 {
+        let mut num = n;
+        let upper = self.s_start + self.range;
+        if n >= self.s_start && n <= upper {
+            num = self.d_start + (n - self.s_start);
+        }
+        // println!("{:?}", self);
+        // println!("{}: {}", n, num);
+        num
+    }
+}
+
+impl Config {
+    pub fn build(mut args: impl Iterator<Item = String>) -> Result<Config, &'static str> {
+        args.next();
+        let file_path = match args.next() {
+            Some(arg) => arg,
+            None => return Err("Didn't get a file path."),
+        };
+        Ok(Config { file_path })
+    }
+}
+
+pub fn run(config: Config) -> Result<u64, Box<dyn Error>> {
+    let mut res = u64::MAX;
+    let mut seeds: Vec<u64> = Vec::new();
+    let mut maps: Vec<Vec<Map>> = Vec::new();
+
+    if let Ok(input) = read_lines(config.file_path) {
+        let length: usize;
+        let lines: Vec<String> = input.map_while(Result::ok).collect();
+        {
+            length = lines.len();
+        }
+        let mut i = 0;
+
+        // Get seeds array
+        while i < length {
+            let line = &lines[i];
+            i += 1;
+            if line.starts_with("seeds:") {
+                for (_, [num]) in RX_NUM.captures_iter(line).map(|c| c.extract()) {
+                    seeds.push(num.parse().unwrap());
+                }
+                break;
+            }
+        }
+        //println!("{:?}", seeds);
+
+        // Get all the transformation structs
+        while i < length {
+            let mut line = &lines[i];
+            i += 1;
+            if !line.is_empty() && line.contains("map:") {
+                let mut temp_maps: Vec<Map> = Vec::new();
+                // Iterate over all the mapping lines
+                while i < length {
+                    line = &lines[i];
+                    i += 1;
+                    if !line.is_empty() {
+                        for (_, [d_start, s_start, range]) in
+                            RX_MAP.captures_iter(line).map(|caps| caps.extract())
+                        {
+                            temp_maps.push(Map {
+                                d_start: d_start.parse().unwrap(),
+                                s_start: s_start.parse().unwrap(),
+                                range: range.parse().unwrap(),
+                            });
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                maps.push(temp_maps);
+            }
+        }
+
+        // Display the transformations found
+        // for (i, elem) in maps.into_iter().enumerate() {
+        //     println!("Category {i}");
+        //     for map in elem {
+        //         println!("{}, {}, {}", map.d_start, map.s_start, map.range);
+        //     }
+        // }
+
+        for mut s in seeds {
+            for cat in &maps {
+                for map in cat {
+                    let temp = map.transform(s);
+                    if temp != s {
+                        s = temp;
+                        break;
+                    }
+                }
+            }
+            if s < res {
+                res = s;
+            }
+            //println!("{s}");
+        }
+    }
+
+    Ok(res)
+}

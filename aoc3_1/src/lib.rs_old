@@ -1,0 +1,133 @@
+use regex::Regex;
+use std::error::Error;
+use std::fs;
+use std::sync::LazyLock;
+
+static RX_SYM: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\*").unwrap());
+static RX_DIG: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\d+").unwrap());
+
+pub struct Config {
+    pub file_path: String,
+}
+
+#[derive(Debug)]
+pub struct Gear {
+    row: usize,
+    ind: usize,
+}
+
+impl Config {
+    pub fn build(mut args: impl Iterator<Item = String>) -> Result<Config, &'static str> {
+        args.next();
+        let file_path = match args.next() {
+            Some(arg) => arg,
+            None => return Err("Didn't get a file path."),
+        };
+        Ok(Config { file_path })
+    }
+}
+
+fn find_gear(row: &str, ind: usize) -> i32 {
+    let mut start: usize = 0;
+    let mut end: usize = row.len() - 1;
+    let above = &row[ind..ind + 1];
+    if RX_DIG.find(above).is_none() {
+        if ind > 3 {
+            start = ind - 3;
+        }
+        if end > ind + 4 {
+            end = ind + 4
+        }
+        if ind > 0 {
+            let l = &row[ind - 1..ind];
+            if RX_DIG.find(l).is_none() {
+                start = ind + 1;
+            }
+        }
+        if ind < row.len() - 2 {
+            let r = &row[ind + 1..ind + 2];
+            if RX_DIG.find(r).is_none() {
+                end = ind;
+            }
+        }
+    } else if RX_DIG.find(above).is_some() {
+        if end > ind + 3 {
+            end = ind + 3;
+        }
+        if ind > 2 {
+            start = ind - 2;
+        }
+        if ind > 0 {
+            let l = &row[ind - 1..ind];
+            if RX_DIG.find(l).is_none() {
+                start = ind;
+            }
+        }
+        if ind < row.len() - 2 {
+            let r = &row[ind + 1..ind + 2];
+            if RX_DIG.find(r).is_none() {
+                end = ind + 1;
+            }
+        }
+    }
+    check(start, end, row)
+}
+
+fn num_before(line: &str) -> i32 {
+    println!("{:?}", &line);
+    let result = 0;
+    if let Some(_dig) = RX_DIG.find(line.get(s..i).unwrap_or_default()) {
+        let rev: String = line[i..g.ind].chars().rev().collect();
+        if let Some(mat) = RX_DIG.find(&rev) {
+            let num: String = mat.as_str().chars().rev().collect();
+            if let Ok(num) = num.parse() {
+                result = num;
+            }
+        }
+    }
+    result
+}
+
+pub fn run(config: Config) -> Result<i32, Box<dyn Error>> {
+    let mut sum = 0;
+    let contents =
+        fs::read_to_string(config.file_path).expect("Something went wrong reading the file.");
+    let lines: Vec<_> = contents.lines().collect();
+    for (row, line) in contents.lines().enumerate() {
+        for m in RX_SYM.find_iter(line) {
+            let mut gears: Vec<i32> = Vec::new();
+            let g = Gear {
+                row,
+                ind: m.start(),
+            };
+            if let Some(mat) = RX_DIG.find(line.get(g.ind + 1..g.ind + 4).unwrap_or_default()) {
+                if let Ok(num) = mat.as_str().parse() {
+                    gears.push(num);
+                }
+            } else if g.ind > 0 {
+                let s = 0;
+                if g.ind > 3 {
+                    s = g.ind - 3;
+                }
+                let temp = num_before(line.get(s..g.ind));
+            } else if g.row > 0 {
+                let num = find_gear(lines[g.row - 1], g.ind);
+                if num > 0 {
+                    gears.push(num);
+                }
+            }
+            // Check if next row has a gear
+            if g.row < lines.len() - 1 {
+                let num = find_gear(lines[g.row + 1], g.ind);
+                if num > 0 {
+                    gears.push(num);
+                }
+            }
+            if gears.len() == 2 {
+                sum += gears[0] * gears[1];
+            }
+            println!("{:?}", gears);
+        }
+    }
+    Ok(sum)
+}
