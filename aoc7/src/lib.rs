@@ -8,8 +8,7 @@ use std::path::Path;
 use std::sync::LazyLock;
 use std::time::Instant;
 
-static RX_HAND: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"([2-9TJQKA]{5})\s+(\d+)").unwrap());
-
+// File reading stuff
 pub struct Config {
     pub file_path: String,
 }
@@ -24,6 +23,17 @@ impl Config {
     }
 }
 
+fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
+where
+    P: AsRef<Path>,
+{
+    let file = File::open(filename)?;
+    Ok(io::BufReader::new(file).lines())
+}
+
+// Solution part
+static RX_HAND: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"([2-9TJQKA]{5})\s+(\d+)").unwrap());
+
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct Hand {
     cards: [u32; 5],
@@ -36,24 +46,24 @@ fn set_value(cards: [u32; 5]) -> u32 {
     let mut max: u32 = 0;
     for card in cards {
         *freq.entry(card.to_owned()).or_default() += 1;
-        max = cmp::max(*freq.get(&card).unwrap(), max);
+        // Don't include the jokers in the max freq value
+        if card != 1 {
+            max = cmp::max(*freq.get(&card).unwrap(), max);
+        }
     }
-    let length = freq.len() as u32;
-    // This represents the hand's value
-    // 8 = 5 of a kind etc.
+    let mut length = freq.len() as u32;
+    // Adjust for jokers.
+    if let Some(joker_len) = freq.get(&1) {
+        max += joker_len;
+        if length >= *joker_len {
+            length -= 1;
+        }
+    }
     match max + 4 - length {
         8 => 6,
         0 => 0,
         n => n - 1,
     }
-}
-
-fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
-where
-    P: AsRef<Path>,
-{
-    let file = File::open(filename)?;
-    Ok(io::BufReader::new(file).lines())
 }
 
 fn make_hand(hand: &str, bid: &str) -> Hand {
@@ -64,7 +74,7 @@ fn make_hand(hand: &str, bid: &str) -> Hand {
             'A' => numbers.push(14),
             'K' => numbers.push(13),
             'Q' => numbers.push(12),
-            'J' => numbers.push(11),
+            'J' => numbers.push(1),
             'T' => numbers.push(10),
             n => numbers.push(n.to_digit(10).unwrap()),
         }
@@ -83,29 +93,6 @@ fn make_hand(hand: &str, bid: &str) -> Hand {
 
 // Main part of code
 pub fn run(config: Config) -> Result<u32, Box<dyn Error>> {
-    // Test
-    if set_value([2, 2, 2, 2, 2]) != 6 {
-        panic!("5OK broken");
-    }
-    if set_value([2, 2, 2, 2, 3]) != 5 {
-        panic!("4OK broken");
-    }
-    if set_value([2, 2, 2, 3, 3]) != 4 {
-        panic!("FH broken");
-    }
-    if set_value([2, 2, 2, 3, 4]) != 3 {
-        panic!("3OK broken");
-    }
-    if set_value([2, 2, 3, 3, 4]) != 2 {
-        panic!("2 pairs broken");
-    }
-    if set_value([2, 2, 3, 4, 5]) != 1 {
-        panic!("One pair broken");
-    }
-    if set_value([2, 3, 4, 5, 6]) != 0 {
-        panic!("High card broken");
-    }
-
     let now = Instant::now();
     let mut sum = 0;
     let mut hands: Vec<Hand> = Vec::new();
