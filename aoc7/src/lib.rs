@@ -55,7 +55,7 @@ fn set_value(cards: [u32; 5]) -> u32 {
     // Adjust for jokers.
     if let Some(joker_len) = freq.get(&1) {
         max += joker_len;
-        if length >= *joker_len {
+        if length > 1 {
             length -= 1;
         }
     }
